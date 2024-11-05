@@ -1,0 +1,162 @@
+---
+title: "PAC1"
+author: "Núria Farran Centelles"
+date: "2024-11-05"
+output: 
+  pdf_document:
+    toc: true          
+    toc_depth: 3      
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Abstract
+
+En aquesta PAC hem treballat els diferents aspectes que hem après en la primera part del curs. En concret hem utilitzat Bioconductor per introduir el nostre dataset d'interés en un contenidor de dades -òmiques com és SummarizedExpression (SE) per tal d'obtenir la matriu amb els valors del nostre dataset i les característiques que l'acompanyen, tot veient una versió una mica diferent al ExpressionSet que havíem tocat en la primera activitat. D'altra banda hem aplicat alguns dels coneixements obtinguts de les -òmiques, per tal de saber com es troben col·locades les dades en una taula (files x columnes) i com hem de manipular aquesta taula original per tal de poder aplicar el SE. Tot i així, hi ha alguns aspectes ja treballats que no els hem integrat en aquesta PAC, com és el control de qualitat (que ja ho vam fer amb els arxius en format FASTA), o els anàlisis diferencials i gràfics derivats, que això ho portarem a la pràctica en les següents unitats.
+
+
+
+# Objectius de l'estudi
+
+L'objectiu principal d'aquest estudi és aplicar els coneixements adquirits en l'activitat 1.1-1.3 sobre manipulació de dades -òmiques, mitjançant Bioconductor, i saber penjar-ho tot al repositori de Github. 
+
+
+
+# Materials i mètodes
+
+Les dades sobre les quals treballem provenen d'un estudi de metabolòmica, on s'estudia un seguit de metabòlits en pacients amb caquèxia i pacients control. No sabem exactament d'on provenen les dades, ja que no hi havia cap informació addicional com l'enllaç a l'article, o l'enllaç a un Github amb les dades crues. No obstant, hem importat les dades a un contenedor, i les hem analitzat des de diferents perspectives pel que pugui ser.
+
+
+
+# Resultats
+
+A continuació, detallarem els diferents passos que hem anat seguint amb el nostre dataset, tot mostrant el codi utilitzat en cada cas i quina informació concreta ens proporciona. Tot  i ser molt escàs, és el primer pas necessari abans de començar a fer un anàlisis diferencial i extreure conclusions sobre com els diferents metabòlits podrien ser un possible biomarcador de caquèxia, o quines vies són les que estan més repercutides en aquesta patologia.
+
+Com hem mencionat, partim d'unes dades que no sabem exctament d'on provenen, no sabem del cert quina és la mostra origen (teixit, plasma, orina, etc), i tampoc quina tècnica s'ha utilitzat per obtenir aquestes dades, tot i que podriem intuir que, segurament, és espectometria de masses, ja que és una tècnica ampliment utilitzada en metabolòmica. En concret, tenim 77 pacients dels quals se'ls hi ha analitzat 63 metabòlits. Anem a carregar aquestes dades i seguim amb l'estudi 
+
+## Carregar dades
+
+En primer lloc carreguem el paquet que volem per tal de crear el contenedor de SummarizedExperiment.
+```{r}
+library(SummarizedExperiment)
+```
+
+D'altra banda hem de llegir el nostre dataset
+```{r}
+raw <- read.csv("human_cachexia.csv")
+```
+
+
+## Adaptació del dataset
+A continuació hem d'adaptar el dataset per tal d'obtenir les dades numèriques i les metadades. Per això dividim la taula que ens donen en dos. En les metadades (meta) tindrem la informació corresponen a quin grup pertany cada subjecte (columnes 1 i 2). D'altra banda tenim les dades (data), on hi ha els valors de cada metabòlit per cada pacient (columna 1 i 3-65). Finalment transformem el data en matriu (pas necessari perquè es puguin llegir correctament les dades en el contenedor).
+```{r}
+meta <- raw[ , 1:2]       
+predata <- raw[ ,c(1,3:65)]
+data_matrix <- as.matrix(predata)
+data <- t(data_matrix)
+colnames(data) <- data[1, ]
+data <- data[-1, ]
+```
+
+
+
+## Creació objecte SummarizedExperiment (SE) i anàlisi estructura
+Per tal de crear un contenedor com SummarizedExperiment (SE), necessitem el paquet SummarizedExperiment (ja carregat anteriorment), una matriu on hi haurà els counts (data), és a dir, els valors de cada metabòlit per cada pacient, i les metadades (meta) que, com ja hem dit, és la informació sobre aquest conjunt de dades, tot descrivint les característiques, el context o les propietats de les dades (en aquest cas únicament contindrà la informació de en quin grup pertany cada pacient: control o caquèxia).
+```{r}
+se <- SummarizedExperiment(assays = list(counts = data), colData = meta)
+```
+
+Una vegada tenim el SE creat, anem a analitzar quina estructura té, mirant la classe, les dimensions i observant les primeres línies del fitxer obtingut.
+
+```{r}
+class(se)
+dim(se)
+head(assay(se), n=2)
+```
+Veiem que ens trobem amb una matriu de 63x77, on 63 son els diferents metabòlits que s'analitzen i 77 són els diferents pacients sobre els quals es fa l'anàlisi. Quan mostrem la taula veiem tan sols les dos primeres files (els dos primers metabòlits) pels 77 pacients.
+
+
+D'altra banda també podem accedir a la informació relacionada a aquestes dades. Així doncs per tal d'accedir al meta, ho cridem amb la funció colData(), que ens mostrarà de quina informació disposem. 
+```{r}
+colData(se)
+```
+
+En aquest cas únicament tenim la categoria de "muscle loss", és a dir, si el pacient té caquèxia o és un control. Tot i així, podria haver més informació en aquest dataframe, com per exemple, l'edat del pacient, el sexe, l'estadi de càncer en que es troba el pacient (sempre i quan la caquèxia estigui relacionada amb un càncer, el que desconeixem), etc.
+
+
+
+## Seleccionar subconjunts de dades
+
+Podem fer subsets de les nostres dades per agafar únicament:
+
+  a) Aquells pacients que tenen caquèxia
+```{r}
+
+se[ ,se$Muscle.loss == "cachexic"]
+
+```
+  En aquest cas veiem uqe hi ha 47 pacients dels 77 que tenen caquèxia.
+
+
+
+ b) Pacients control de l'estudi
+ 
+```{r}
+
+se[ ,se$Muscle.loss == "control"]
+```
+  D'altra banda, com podíem esperar, tenim 30 pacients que tenen el paper de controls en l'estudi.
+
+A partir d'aquí podriem fer dos grups i fer un anàlisis diferencial entre pacients amb caquèxia i controls, mitjançant un anàlisi de regressió lineal (típic en microarrays), mitjançant el paquet limma. No obstant també podriem aplicar un test estadístic per dades que no segueixen una distribució normal (el que sol passar en -òmiques) com el test de Wilcoxon, i per últim corregint les dades amb el mètode de Bonferroni per a comparacions múltiples, o més utilitzat encara, el mètode de Benjamini i Hochberg, per tal que el p-value resultant sigui el màxim rigorós possible.
+Finalment podriem generar un document amb aquest anàlsisi diferencial entre les dues condicions.
+
+## Entrega de l'anàlisi en els diferents formats demanats
+
+En el nostre cas, el següent pas a realitzar és la generació del informe derivat d'aquest micro anàlisi, i la generació de un repositori Github, per tal de pujar tant aquest informe, com tots els arxius derivats com son: 
+
+
+
+### Objecte contenedor creat amb les dades i metadades (format .Rda)
+```{r}
+save(se, file = "objecte_se.Rda")
+```
+
+
+### Script de R utilitzat amb els apunts corresponents i metadades en un arxiu markdown
+Això no ho farem aquí sinó que obrirem un script a part, ja sigui estàndard de R o markdown
+
+
+
+### Dades i metadades en dos arxius .txt 
+```{r}
+write.table(data, file = "data.txt", sep = "\t", quote = FALSE, row.names = TRUE)
+write.table(data, file = "meta.txt", sep = "\t", quote = FALSE, row.names = TRUE)
+```
+
+
+
+### URL Github amb tots els documents generats amb aquest informe inclós
+Per tal de penjar-ho a Github hem creat un repositori amb el nom "Farran-Centelles-Nuria-PEC1" i mitjançant el GitHub Desktop, hem enllaçat els documents des del meu portàtil al repositori online.A continuació deixo l'enllaç al repositori per poder accedir a tota la informació addicional de les dades:
+
+https://github.com/nuriiia/Farran-Centelles-Nuria-PEC1
+
+
+
+# Discussió, limitacions i conclusions de l'estudi
+En aquest estudi hem pogut aprendre com s'analitzaria un dataset derivat d'un experiment -omic, on és necessari un anàlisi bioninformàtic per tal d'identificar possibles metabòlits o vies de senyalització afectades per la caquèxia.Tot i així, ens hem quedat en la primera part, que es la creació del contenedor SE, per tal que, a posteriori, es pugui fer un anàlisi diferencial, cosa que durem a terme en les següents unitats. No obstant, abans d'aquest pas també caldria normalitzar les dades obtingudes per tal que l'expressió d'un metabòlit no tingui una major importància que un altre, sols per un tema d'escala de valors.
+Una vegada haguéssim fet aquest anàlisis diferencial, podríem senyalar algunes vies o metabòlits en concret, que poden estar afectats en el procés de caquèxia, tot fent un anàlisi d'enriquiment. En la mateixa línea, també podríem trobar biomarcadors de diagnòstic o de pronòstic, tot comparant el valor dels metabòlits de cada pacient amb la seva història i perfil clínic.
+
+Finalment, com a observació personal, voldria destacar que el pas més complex o almenys on jo m'he entrebancat, ha sigut el fet de saber en un inici, com s'havia de dividir la taula i presentar-la davant del contenedor SE, per tal que les dades es puguessin carregar correctament i a partir d'aquí, es puguessin generar les diferents cerques i anàlisis. Així doncs, tinc ganes de veure tot el procés posterior per ser capaç de dur a terme un anàlisi global a partir de dades -òmiques, ja provinguin d'un anàlisi de transcriptòmica, metabolòmica o proteòmica.
+
+
+
+
+
+
+
+
+
+
